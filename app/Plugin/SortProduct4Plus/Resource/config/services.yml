@@ -1,0 +1,11 @@
+parameters:
+    sort_product.list_order_by.name: 'おすすめ順'
+services:
+    Plugin\SortProduct4Plus\Entity\SortProductJoin:
+        arguments:
+            - '@Eccube\Common\EccubeConfig'
+        tags: ['eccube.query_customizer']
+    Plugin\SortProduct4Plus\Entity\SortProductOrderBy:
+        arguments:
+            - '@Eccube\Common\EccubeConfig'
+        tags: ['eccube.query_customizer']

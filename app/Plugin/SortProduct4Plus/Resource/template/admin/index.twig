@@ -1,0 +1,347 @@
+
+{% extends '@admin/default_frame.twig' %}
+
+{% set menus = ['product', 'sort_product'] %}
+
+{% block title %}{{ 'sort_product.title'|trans }}{% endblock %}
+{% block sub_title %}{{ 'sort_product.subtitle'|trans }}{% endblock %}
+
+{% block stylesheet %}
+
+{% endblock stylesheet %}
+
+{% block javascript %}
+    <meta http-equiv="Content-Script-Type" content="text/javascript">
+
+    <script src="{{ asset('assets/js/vendor/jquery.ui/jquery.ui.core.min.js', 'admin') }}"></script>
+    <script src="{{ asset('assets/js/vendor/jquery.ui/jquery.ui.widget.min.js', 'admin') }}"></script>
+    <script src="{{ asset('assets/js/vendor/jquery.ui/jquery.ui.mouse.min.js', 'admin') }}"></script>
+    <script src="{{ asset('assets/js/vendor/jquery.ui/jquery.ui.sortable.min.js', 'admin') }}"></script>
+
+    <script type="text/javascript">
+
+        {# 初期化 {id => sort_no} #}
+        var sortNoById = {};
+        {% for ProductPlus in pagination %}
+            {% set id = ProductPlus.product_id %}
+            sortNoById[{{ id }}] = {{ ProductPlus.sort_no }};
+        {% endfor %}
+
+        {# 初期化 {順位 => sort_no} #}
+        var sortNoByRank = {};
+
+        $(function() {
+
+            {# 順位ごとのsort_noを更新 #}
+            refreshSortNoByRank();
+
+            {# [キックスタート] 商品情報をドラッグ&ドロップで移動した #}
+            $('.sortable-container').sortable({
+                items: '> .sortable-item',
+                cursor: 'move',
+                update: function (e, ui) {
+                    {# 操作対象から移動元商品IDを取得 #}
+                    var fromProductId = ui.item[0].dataset.id;
+                    {# 暗転 #}
+                    $('body').append($('<div class="modal-backdrop show"></div>'));
+                    {# 表示順の更新 #}
+                    updateSortNo(fromProductId);
+                }
+            });
+
+            {# 並び替え後にsort noを更新 #}
+            var updateSortNo = function (fromProductId) {
+
+                {# 　指定IDごとの順位を取得 #}
+                var rank = getRankById(fromProductId);
+
+                {# 　移動先のsort_noを取得 #}
+                var toSortNo = sortNoByRank[rank];
+
+                $.ajax({
+                    url: '{{ url('plg_SortProduct_product_rank_move') }}',
+                    type: 'POST',
+                    data: {
+                        {# 移動元ID (商品ID) #}
+                        'from_id': fromProductId,
+                        {# 移動先ID (sort_no) #}
+                        'to_id':   toSortNo,
+                        {% if category_id != null %}'category_id': {{ category_id }},{% endif %}
+                        'page_no': {{ page_no }},
+                        'page_count': {{ page_count }}
+                    }
+                }).done(function(result){
+                    {# ajax結果を元に、IDごとのsort_noを更新 #}
+                    setSortNo(JSON.parse(result));
+
+                }).always(function () {
+                    {# 暗転を消す #}
+                    $(".modal-backdrop").remove();
+                });
+            };
+
+        });
+
+        {# 指定IDの順位を取得 #}
+        function getRankById(id) {
+            {# 1行目から調査開始(1行目は順位が1) #}
+            var rank = 1;
+            var result = null;
+            {# 指定IDの順位を取得 #}
+            $('.sortable-item').each(function () {
+                if (this.dataset.id == id) {
+                    result = rank;
+                }
+                rank++;
+            });
+
+            return result;
+        }
+
+        {# ajax結果を元に、IDごとのsort_noを更新 #}
+        function setSortNo(result) {
+
+            {# IDごとのsort_noを更新 #}
+            sortNoById = result;
+
+            {# IDごとのsort_noの表示を更新 #}
+            var rank = 1;
+            $('.sortable-item').each(function () {
+
+                var id = this.dataset.id;
+
+                {# ランク表示を修正 #}
+                $('#rank_view_' + id).text(rank);
+                rank++;
+
+                {% if onDebug == true %}
+                    {# デバッグモードの場合: sort_no表示の変更 #}
+                    $('#sort_no_view_' + id).html('[' + sortNoById[id] + ']');
+                {% endif %}
+            });
+
+            {# 順位ごとのsort_noを更新 #}
+            refreshSortNoByRank();
+
+            return true;
+        }
+
+        {# 順位ごとのsort_noを更新 #}
+        function refreshSortNoByRank() {
+            {# 初期化 #}
+            sortNoByRank = {};
+
+            {# 1行目から調査開始(1行目は順位が1) #}
+            var rank = 1;
+            {# 順位ごとのsort_noを更新 #}
+            $('.sortable-item').each(function () {
+                {# 順位ごとのIDを取得 #}
+                var id = this.dataset.id;
+                {# 順位ごとのsort_noを更新 #}
+                sortNoByRank[rank] = sortNoById[id];
+                rank++;
+            });
+
+            return true;
+        }
+
+
+        {# [キックスタート] 移動先ランク指定方式 でクリックした場合 #}
+        function clickMoveRankButton(fromId, selectBoxNo) {
+
+            {# 移動元のID(商品ID) #}
+            var fromProductId = parseInt(fromId);
+
+            {# 移動先のID(ランク) #}
+            {# var toRank = parseInt($('#select_box_' + selectBoxNo).val()); #}
+            var toRank = parseInt($('#text_box_' + selectBoxNo).val());
+
+            {# フォーム作成/処理 #}
+            var selector = '#changeRankForm';
+            {# 　フォーム作成 #}
+            var html ='';
+            {# 移動元ID(商品ID) #}
+            html +='<input type="hidden" name="from_id" value="' + fromProductId + '">';
+            {# 移動先ID(順位) #}
+            html +='<input type="hidden" name="to_id" value="' + toRank + '">';
+            addHTML(selector, html);
+            {# 　フォーム送信 #}
+            $(selector).submit();
+        }
+
+        function addHTML(selector,html){
+            $(selector).append(html);
+            return true;
+        }
+
+    </script>
+
+
+{% endblock javascript %}
+
+{% block main %}
+
+    {% if category_id is not null %}
+        {% set actionLink = url(this_page_by, { 'categoryId': category_id }) %}
+    {% else %}
+        {% set actionLink = url(this_page) %}
+    {% endif %}
+
+    {# 移動先ランク指定方式 のフォーム #}
+    {% if category_id is null %}
+    <form id="changeRankForm" method="post" action="{{ url('plugin_SortProduct', { 'page_no': page_no, 'page_count': page_count}) }}">
+    {% else %}
+    <form id="changeRankForm" method="post" action="{{ url('plugin_SortProduct_byCategory', { 'categoryId': category_id, 'page_no': page_no, 'page_count': page_count}) }}">
+    {% endif %}
+    </form>
+
+    <div class="c-contentsArea__cols">
+        <div class="c-contentsArea__primaryCol">
+            <div class="c-primaryCol">
+                <div class="card rounded border-0 mb-4">
+                    {% if pagination|length <= 0 %}
+
+                        {# [商品がありません] メッセージの表示 #}
+                        <div class="card-header">
+                            {% if category_id == null %}
+                                {# カテゴリー指定がない場合 #}
+                                {{ 'sort_product.header.no_product'|trans }}
+                            {% else %}
+                                {# カテゴリー指定がある場合 #}
+                                {{ 'sort_product.header.no_product_cat'|trans }}
+                            {% endif %}
+                        </div>
+
+                    {% else %}
+                        <div class="card-header">
+                            <div class="row">
+                                <div class="col-9">
+                                    {{ 'sort_product.header'|trans }}
+                                </div>
+
+                                <!-- 表示件数指定 -->
+                                <div class="col-3 text-right">
+                                    <div class="d-inline-block mr-2">
+                                        <div>
+                                            <select class="custom-select" onchange="location = this.value;">
+                                                {% for pageMax in pageMaxis %}
+                                                    {% set pageLink = path( this_page, { 'page_no': 1, 'page_count': pageMax.name}) %}
+                                                    {% if category_id is not null %}
+                                                        {% set pageLink = path( this_page_by, { 'categoryId': category_id, 'page_no': 1, 'page_count': pageMax.name}) %}
+                                                    {% endif %}
+                                                    <option {% if pageMax.name == page_count %}selected="selected"{% endif %}
+                                                            value="{{ pageLink }}">
+                                                        {{ 'admin.common.count'|trans({ '%count%': pageMax.name }) }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div><!-- /.box-header -->
+
+                        <div class="card-body p-0">
+                            <div class="card rounded border-0 mb-2">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th class="border-top-0 pl-3 pt-2 pb-2"><i class="fa fa-bars text-ec-gray"></i></th>
+                                            <th class="border-top-0 pt-2 pb-2">表示順</th>
+                                            <th class="border-top-0 pt-2 pb-2">並び順</th>
+                                            <th class="border-top-0 pt-2 pb-2">ID</th>
+                                            <th class="border-top-0 pt-2 pb-2">画像</th>
+                                            <th class="border-top-0 pt-2 pb-2">商品名</th>
+                                            <th class="border-top-0 pt-2 pb-2 text-nowrap">公開状態</th>
+                                            <th class="border-top-0 pt-2 pb-2 text-nowrap">Sort No</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="sortable-container">
+                                        {#<!-- フロー表示 商品情報１行ずつ表示 ここから -->#}
+                                        {% for ProductPlus in pagination %}
+                                            {% set id = ProductPlus.product_id %}
+                                            <tr class=" sortable-item" data-id="{{ id }}" data-sort_no="{{ ProductPlus.sort_no }}" style="background: white;">
+                                                <td class="align-middle pl-3 mode-view">
+                                                    <i class="fa fa-bars text-ec-gray"></i>
+                                                </td>
+
+                                                {#<!-- 商品並び替えツール ここから -->#}
+                                                {#<!-- 並び順番号 -->#}
+                                                {% set this_no = loop.index + page_count * (page_no - 1) %}
+                                                <td id="rank_view_{{ id }}" class="align-middle">
+                                                    {{ this_no }}
+                                                </td>
+
+                                                {#<!-- 並び順の指定セレクトボックス と 変更ボタン -->#}
+                                                <td class="align-middle">
+                                                    <input type="number" id="text_box_{{ this_no }}" class="form-control" style="width:50%; display: inline-block;" placeholder="(1〜{{ maxRank }})" />
+                                                    &nbsp;
+                                                    <button type="button" id="changeRank" class="btn btn-ec-conversion"
+                                                            onclick="clickMoveRankButton('{{ ProductPlus.product_id }}', '{{ this_no }}')" >{{ 'sort_product.move.button'|trans }}</button>
+                                                </td>
+                                                {#<!-- 商品並び替えツール ここまで -->#}
+
+                                                {#<!-- 商品ID -->#}
+                                                <td class="align-middle">
+                                                    {{ ProductPlus.product_id }}
+                                                </td>
+                                                {#<!-- 商品画像 -->#}
+                                                <td class="align-middle">
+                                                    <a href="{{ url('admin_product_product_edit', { id : ProductPlus.product_id }) }}">
+                                                        <img src="{{ asset(ProductPlus.Product.mainFileName|no_image_product, 'save_image') }}" style="max-width: 60px" />
+                                                    </a>
+                                                </td>
+
+                                                {#<!-- 商品名 -->#}
+                                                <td id="sortable_list__item_body--{{ ProductPlus.sort_no }}" class="align-middle">
+                                                    {{ ProductPlus.Product.name }}
+                                                </td>
+
+                                                {# 公開状態 #}
+                                                <td class="align-middle">
+                                                    {% if ProductPlus.Product.Status.id == 1 %}{{ ProductPlus.Product.Status.name }}{% else %}<span style="color:red;">{{ ProductPlus.Product.Status.name }}</span>{% endif %}
+                                                </td>
+
+                                                {# Sort No #}
+                                                <td class="align-middle">
+                                                    {% if onDebug == true %}<span id="sort_no_view_{{ id }}">[{{ ProductPlus.sort_no }}]</span>{% endif %}
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                        {#<!-- フロー表示 商品情報１行ずつ表示 ここまで -->#}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="row justify-content-md-center mb-4">
+                            {#<!-- ページャー ここまで -->#}
+                            {% if pagination.totalItemCount > 0 %}
+                                {% if category_id is not null %}
+                                    {% include "SortProduct4Plus/Resource/template/admin/pager_custom.twig" with { 'pages' : pagination.paginationData, 'routes' : this_page_by , 'categoryId' : category_id } %}
+                                {% else %}
+                                    {% include "@admin/pager.twig" with { 'pages' : pagination.paginationData, 'routes' : this_page } %}
+                                {% endif %}
+                            {% endif %}
+                            {#<!-- ページャー ここまで -->#}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="c-contentsArea__secondaryCol">
+            <div class="c-secondaryCol">
+                <div class="card rounded border-0 mb-4">
+                    {#<!-- カテゴリーツリー表示 ここから -->#}
+                    {% if category_id is null %}
+                        {% include "SortProduct4Plus/Resource/template/admin/block/block_category_tree.twig" with {'categoryId': 0} only %}
+                    {% else %}
+                        {% include "SortProduct4Plus/Resource/template/admin/block/block_category_tree.twig" with {'categoryId': category_id} only %}
+                    {% endif %}
+                    {#<!-- カテゴリーツリー表示 ここまで -->#}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

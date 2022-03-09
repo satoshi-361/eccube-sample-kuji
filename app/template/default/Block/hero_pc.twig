@@ -1,0 +1,23 @@
+{% if Products|length > 0 %}
+<div class="main-image">
+	<ul class="main_slider">
+		{% for Product in Products if Product.Status == '公開' and Product.getProductClasses()[0].getRemainStatus() != 3 and Product.getProductClasses()[0].getRemainStatus() != 2 %}
+			{% set break = false %}
+				{% for item in Product.getProductCategories() if break == false %}
+				{% if item.getCategory() == '新商品' %}
+				{% set break = true %}
+				<li><center>
+					<a href="{{ url('product_detail', {'id': Product.id}) }}">
+						{% if Product.getProductImage() | length > 1 %}
+						<img width="1200" src="{{ asset(Product.getProductImage()[1], 'save_image') }}" class="img-responsive" loading="lazy">
+						{% else %}
+						<img width="1200" src="{{ asset(Product.main_list_image|no_image_product, 'save_image') }}" class="img-responsive" loading="lazy">
+						{% endif %}
+					</a></center>
+				</li>
+				{% endif %}
+			{% endfor %}
+		{% endfor %}
+	</ul>
+</div><!-- main-image -->
+{% endif %}

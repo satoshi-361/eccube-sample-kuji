@@ -1,0 +1,57 @@
+<style>
+    .c-directoryTree ul>li>ul li:not(:last-of-type)>label:before,
+    .c-directoryTree ul>li>ul li:last-of-type>label:before{ margin-right: 1.6em;}
+</style>
+
+{#// メニューを表示する関数#}
+{% macro tree(Category, TargetId, level, Ids) %}
+    {% import _self as selfMacro %}
+    {% set level = level + 1 %}
+
+    <li>
+        <label {% if (Category.children|length > 0) and (Category.id not in Ids) %}class="collapsed"
+               {% endif %}data-toggle="collapse"
+               href="#directory_category{{ Category.id }}"
+               aria-expanded="{% if Category.id in Ids %}true{% endif %}"
+               aria-controls="directory_category{{ Category.id }}"></label>
+        <span>
+            <a href="{{ url('plugin_SortProduct_byCategory', { categoryId : Category.id }) }}">{{ Category.name }}({{ Category.children|length }})</a>
+        </span>
+        {% if Category.children|length > 0 %}
+            <ul class="collapse {% if Category.id in Ids %}show{% endif %}"
+                id="directory_category{{ Category.id }}">
+                {% for ChildCategory in Category.children %}
+                    {{ selfMacro.tree(ChildCategory, TargetId, level, Ids) }}
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </li>
+{% endmacro %}
+
+{% set TopCategories = repository('Eccube\\Entity\\Category').findBy({'Parent' : null}, {'sort_no' : 'DESC'}) %}
+{% set TargetCategoryId = categoryId|default(null) %}
+{% set Ids = {} %}
+{% if TargetCategoryId is not null %}
+    {% set TargetCategory = repository('Eccube\\Entity\\Category').find(TargetCategoryId) %}
+    {% if TargetCategory is not null and TargetCategory.Parents is not null %}
+        {% for cate in TargetCategory.Parents %}
+            {% set Ids = Ids|merge([cate.id]) %}
+        {% endfor %}
+    {% endif %}
+    {% set Ids = Ids|merge([TargetCategoryId]) %}
+{% endif %}
+
+<div class="card-header">
+    <span class="card-title"><a href="{{ url('plugin_SortProduct') }}">全カテゴリー</a></span>
+</div>
+<div class="card-body">
+    <div class="c-directoryTree mb-3">
+        <ul id="category_tree">
+            {% import _self as renderMacro %}
+            {% for TopCategory in TopCategories %}
+                {{ renderMacro.tree(TopCategory, TargetCategoryId|default(null), 0, Ids)}}
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
